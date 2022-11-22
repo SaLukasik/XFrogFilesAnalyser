@@ -6,18 +6,49 @@ import pandas as pd
 import warnings
 from tqdm import tqdm
 from pandas.errors import ParserWarning
+import shutil
+
+def prepare_for_x_frog(main_folder, sub_folders, **kwargs):
+    for i in tqdm(range(len(sub_folders))):
+        file = open(fr'{main_folder}\{sub_folders[i]}\frog.dat', "r+")
+        text = file.read()
+        idx = text.find("Central wavelength of retrieved field is ")
+        idx_wave = len("Central wavelength of retrieved field is ") + idx
+        j = 1
+        while(text[idx_wave + j] != " "):
+            j += 1
+        j -= 1
+        wavelen = text[idx_wave:idx_wave+4]
+        file.close()
+
+        file2 = open(fr'{main_folder}\{sub_folders[i]}\Ek.dat', "r")
+        if len(file2.readline()) > 5:
+            copy = file2.read()
+            file2.close()
+
+            file3 = open(fr'{main_folder}\{sub_folders[i]}\Ek.dat', "w")
+            file3.write(wavelen + "\n")
+            file3.write(copy)
+            file.close()
 
 
 def plot_data(main_folder, sub_folders, **kwargs):
     for i in range(len(sub_folders)):
 
         df = pd.read_table(fr'{main_folder}\{sub_folders[i]}\Speck.dat', sep="\s+")
+        df_time = pd.read_table(fr'{main_folder}\{sub_folders[i]}\Ek.dat', sep="\s+", skiprows=1)
         d_array = df.to_numpy()
+        d_array_time = df_time.to_numpy()
         plt.figure(1)
         plt.plot(d_array[:, 0], d_array[:, 2], label=sub_folders[i])
 
         plt.figure(2)
         plt.plot(d_array[:, 0], d_array[:, 1], label=sub_folders[i])
+        plt.figure(3)
+        plt.plot(d_array_time[:, 0], d_array_time[:, 2], label=sub_folders[i])
+
+        plt.figure(4)
+        plt.plot(d_array_time[:, 0], d_array_time[:, 1], label=sub_folders[i])
 
     parent_dir = main_folder.replace(os.sep, '/')
     path = os.path.join(parent_dir, 'results')
@@ -40,7 +71,25 @@ def plot_data(main_folder, sub_folders, **kwargs):
     plt.grid()
     plt.legend()
     plt.savefig(fr"{main_folder}\results\wave_and_intensity.pdf")
+
+    plt.figure(3)
+    plt.xlabel('Time [fs]')
+    plt.ylabel('Phase [rad]')
+    plt.xlim(kwargs.get('cut_phas_t'))
+    plt.legend()
+    plt.grid()
+    plt.savefig(fr"{main_folder}\results\time_and_phase.pdf")
+
+    plt.figure(4)
+    plt.xlabel('Time [fs]')
+    plt.ylabel('Intensity')
+    plt.xlim(kwargs.get('cut_int_t'))
+    plt.grid()
+    plt.legend()
+    plt.savefig(fr"{main_folder}\results\time_and_intensity.pdf")
+
     plt.show()
+
 
 def plotter(df):
 
@@ -97,10 +146,55 @@ def plot_drawings(main_folder, sub_folders, **kwargs):
         plt.savefig(fr"{main_folder}\results\plots\{sub_folders[i]}.pdf")
         plt.clf()
 
+
+def prepare_folders(main_folder, sub_folders, **kwargs):
+    parent_dir = main_folder.replace(os.sep, '/')
+    for i in tqdm(range(len(sub_folders))):
+        path = os.path.join(parent_dir, f'{sub_folders[i]}')
+        try:
+            os.mkdir(path)
+        except OSError as error:
+            print(
+                'Error during saving, may be not important (is thrown if saving again in same folder) but check if folders were made')
+
+        #try to make files from **kwarg
+        for j in kwargs.get('names'):
+            print(fr"\{sub_folders[i]}{j}")
+            shutil.copy(fr'{main_folder}\{sub_folders[i]}{j}', fr'{main_folder}\{sub_folders[i]}\{sub_folders[i]}{j}')
+            #os.system(fr"copy {main_folder}\11.png {main_folder}\11")
+
+
 if __name__ == '__main__':
-    path = r"D:\XFROG\Surowe XFROGi\FROG_SAM_LASER_0fs2_BBO_0.5mm"
-    folders = [13, 17, 21, 25, 29]
-    plot_data(path, folders, cut_int=(1000, 1050), cut_phas=(900, 1150))
+    # path - path to the folder with subfolders containing data from frog or xfrog
+    # each subfolder should be named as int number and contain the .dat files from doing
+    # frog or x-frog procedure. In this folder program will create "result" folder
+    # with the results of the analysis. All previous results will be overwritten!!!
+    path = r"D:\XFROG\Surowe XFROGi\SMF28_160mm_A110x2_-48fs2_BBO_0.5mm"
+
+    # list of folders to be analysed (each number is folder name)
+    folders = [11, 13, 15, 17, 19, 21, 23,25,27,29,31]
+
+    # "prepare_for_x_frog(...)" is a command that should be used to modify Ek.dat
+    # files in given folders, so they could be used for x-frog procedure.
+    #prepare_for_x_frog(path, folders)
+
+    # this function will draw 4 plots (phase/intensity on wavelength/time)
+    # all plots will be saved/overwritten in "result" folder.
+    plot_data(path, folders, cut_int=(1005, 1065), cut_phas=(1000, 1070), cut_int_t=(-2000,2000))
+
+    # this function will draw the scan picture of impulse for impulses
+    # from given folders and save them in "results/plots". A plot will be done
+    # for each folder separately.
+
     plot_drawings(path, folders)
+
+    # path_funtion creates folder structure needed for frog files
+    # it creates folders with names from given list and then to each folder
+    # it copies the files with same number. We need do input the extensions
+    # of files we want to copy in "names" agrument.
+    # path_frog = r"D:\XFROG\Surowe XFROGi\SMF28_160mm_A110x2_-48fs2_BBO_0.5mm"
+    # folders_frog = [11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31]
+    # prepare_folders(path_frog, folders_frog, names=[".txt", ".png", "_autocorrelation.dat"])
+
 
 
